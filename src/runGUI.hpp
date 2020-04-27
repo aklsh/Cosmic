@@ -4,23 +4,25 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-
+#include "pgu.hpp"
 #include "imgui.h"
 #include "imgui_impl_sdl.h"
 #include "imgui_memory_editor.h"
 #include "imgui_logger.h"
 #include "imguifilesystem.h"
+#include "imgui_internal.h"
 
-#ifdef __arm__ //If on the Raspberry Pi 
+#ifdef __arm__ //If on the Raspberry Pi
+    #include <wiringPi.h>
     #include "imgui_impl_opengl2.h"
     #include <SDL_opengl.h>
 #else
     #include "imgui_impl_opengl3.h"
-    #include <GL/gl3w.h>
+    //#include <GL/gl3w.h>
 #endif
 
 #include "cosproc.hpp"
-#include "pgu.hpp"
+
 
 
 class runGUI{
@@ -34,6 +36,7 @@ class runGUI{
         void Assembler(cosproc proc);
         void ShowTopMenu();
         void VideoOut(PGU* pgu);
+        void handlePins();
 
 
 

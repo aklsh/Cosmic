@@ -1,5 +1,6 @@
 EXE = cosmic
 SOURCES = main.cpp cosproc.cpp pgu.cpp runGUI.cpp runCLI.cpp 
+SOURCES += lib/gl3w/GL/glew.c
 SOURCES += lib/misc/imgui_impl_sdl.cpp lib/misc/imgui_impl_opengl3.cpp lib/misc/imgui_impl_opengl2.cpp
 SOURCES += lib/imgui/imgui.cpp lib/imgui/imgui_demo.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_widgets.cpp
 SOURCES += lib/misc/imguifilesystem.cpp
@@ -18,8 +19,11 @@ LIBS =
 
 
 ## Using OpenGL loader: gl3w [default]
-SOURCES += lib/gl3w/GL/gl3w.c
+# SOURCES += lib/gl3w/GL/gl3w.c
 CXXFLAGS += -Ilib/gl3w
+ifeq ($(PLAT), Pi)
+	CXXFLAGS += -lwiringPi
+endif
 
 ifeq ($(UNAME_S), Linux) #LINUX
 	ECHO_MESSAGE = "Linux"
@@ -70,7 +74,6 @@ endif
 %.o:lib/gl3w/GL/%.c
 	mkdir -p bin
 	$(CC) $(CFLAGS) -c -o bin/$@ $<
-
 
 all: $(EXE)
 	@echo Build complete for $(ECHO_MESSAGE)

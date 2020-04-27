@@ -13,20 +13,46 @@ static char editorText[256 * 1000] = "";
 /** Globals to show and hide windows **/
 bool showGraphics = false;
 bool showDemo = false;
+bool verbose = true;
 
-
-
-void MemoryWrite(uint16_t address, uint8_t value)
-{
-    debugLog.AddLog("Wrote %X to %X\n", value, address);
+void MemoryWrite(uint16_t address, uint8_t value){
+    if(verbose){
+        debugLog.AddLog("Wrote %X to %X\n", value, address);
+    }
     memory[address] = value;
 }
 
-uint8_t MemoryRead(uint16_t address)
-{
-    debugLog.AddLog("READ: %X from %X\n", memory[address], address);
+uint8_t MemoryRead(uint16_t address){
+    if(verbose){
+        debugLog.AddLog("READ: %X from %X\n", memory[address], address);
+    }
     return memory[address];
 }
+
+#ifdef __arm__
+void runGUI::handlePins(){
+    verbose = false;
+    int base = 0xC402;
+    for(int i = 0; i <= 28; i++){
+        int byte = MemoryRead(base+i);
+        if(byte & 0x80){ //Write
+            pinMode(i,OUTPUT);
+            if(byte & 0x7F){
+                digitalWrite(1,i);
+            }
+            else{
+                digitalWrite(0,i);
+            }
+        }
+        else{ //Read
+            pinMode(i,INPUT);
+            int tmp = digitalRead(i);
+            MemoryWrite(base+i,tmp&0x7F);
+        }
+    }
+    verbose = true;
+}
+#endif
 
 void runGUI::LoadIntoMemory(const char *filepath)
 {
@@ -96,12 +122,6 @@ void runGUI::MemoryEditor(cosproc proc){
 }
 
 void runGUI::VideoOut(PGU* pgu){
-    // SDL_Event event;
-    // while (SDL_PollEvent(&event)){
-    //     ImGui_ImplSDL2_ProcessEvent(&event);
-    //     printf("%d\n",event.key.keysym.scancode);
-    // }
-
     ImGui::SetNextWindowSize(ImVec2(650, 450), ImGuiCond_Once);
     ImGui::SetNextWindowPos(ImVec2(500, 300), ImGuiCond_Once);
     ImGui::Begin("Video Out");
@@ -344,7 +364,7 @@ int runGUI::run(){
         SDL_GL_MakeCurrent(window, gl_context);
         SDL_GL_SetSwapInterval(1); // Enable vsync
 
-        bool err = gl3wInit() != 0;
+        bool err = glewInit() != 0;
         if (err){
             fprintf(stderr, "Failed to initialize OpenGL loader!\n");
             return 1;
@@ -361,6 +381,12 @@ int runGUI::run(){
         ImGui_ImplOpenGL3_Init(glsl_version);
     #endif
 
+    //Setup Raspberry Pi Pins
+    #ifdef __arm__ //RPi
+        wiringPiSetup();
+    #endif
+
+
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     glEnable(GL_DEBUG_OUTPUT);
@@ -376,7 +402,21 @@ int runGUI::run(){
     bool done = false;
 
     bool ctrlState = false;
+
+    ImGuiContext* context = ImGui::GetCurrentContext();
+    const char* focused = "";
+    int result;
+
     while (!done){
+        result = strcmp(focused, "Video Out");
+        if(result == 0){
+            for (int i = 0; i < IM_ARRAYSIZE(io.KeysDown); i++){
+                if (ImGui::IsKeyPressed(i)){
+                    MemoryWrite(0xC400, 0xFF);
+                    MemoryWrite(0xC401, i);
+                }
+            }
+        }
         SDL_Event event;
         while (SDL_PollEvent(&event)){
             ImGui_ImplSDL2_ProcessEvent(&event);
@@ -386,6 +426,7 @@ int runGUI::run(){
                 done = true;
             if (event.type == SDL_KEYDOWN){
                 //TODO: Add scope to this with only affecting the active window
+                // debugLog.AddLog("Keys mods: %s%s%s%s\n", io.KeyCtrl ? "CTRL " : "", io.KeyShift ? "SHIFT " : "", io.KeyAlt ? "ALT " : "", io.KeySuper ? "SUPER " : "");
                 switch (event.key.keysym.sym){
                     case SDLK_SPACE:
                         if (ctrlState)
@@ -430,11 +471,15 @@ int runGUI::run(){
                         break;
                     case SDLK_LCTRL:
                         ctrlState = false;
+                        // debugLog.AddLog(ImGui::IsWindowFocused());
                         break;
                 }
             }
         }
-
+        
+        #ifdef __arm__
+        handlePins();
+        #endif
 
         pgu.copy(memory+0x8000);
         #ifdef __arm__
@@ -566,7 +611,7 @@ int runGUI::run(){
         const char *speeds[] = {"3000", "1500", "600", "300", "60"};
         static const char *current_speed = speeds[0];
         static ImGuiComboFlags flags = 0;
-        if (ImGui::BeginCombo("Mhz", current_speed, flags)){
+        if (ImGui::BeginCombo("Hz", current_speed, flags)){
             for (int n = 0; n < IM_ARRAYSIZE(speeds); n++){
                 bool is_selected = (current_speed == speeds[n]);
                 if (ImGui::Selectable(speeds[n], is_selected)){
@@ -623,6 +668,8 @@ int runGUI::run(){
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         #endif
         SDL_GL_SwapWindow(window);
+
+        focused = context->WindowsFocusOrder.back()->Name; //Set at end to guarentee size > 0 on init
     }
 
     pgu.kill();
